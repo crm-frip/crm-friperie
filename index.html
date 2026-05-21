@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -829,6 +828,7 @@
     <div id="sync-status"></div>
     <button onclick="exportData()">📥 Exporter</button>
     <button onclick="importData()">📤 Importer</button>
+    <button onclick="ouvrirParametresIA()" style="color:#E8C99A;border-color:rgba(232,201,154,0.3)">🔑 Clé API IA</button>
   </div>
 </nav>
 
@@ -878,6 +878,7 @@
       <button class="btn btn-primary" onclick="showPage('produits');setTimeout(showProduitForm,50)">👗 Nouveau produit</button>
       <button class="btn btn-secondary" onclick="openAchatBrocante()" style="border-color:var(--accent);color:var(--accent);font-weight:700">🛒 Achat brocante</button>
       <button class="btn btn-secondary" onclick="ouvrirScannerGmail()" style="border-color:#D44638;color:#D44638;font-weight:700">📧 Mails Vinted</button>
+      <button class="btn btn-secondary" onclick="ouvrirParametresIA()" style="border-color:#6A3D9A;color:#6A3D9A;font-weight:700">🔑 Clé IA</button>
     </div>
   </div>
 
@@ -3532,8 +3533,8 @@ NE mets PAS de labels "TITRE :" ou "CORPS :" — texte direct uniquement.` });
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1200, messages: [{ role: 'user', content: userContent }] })
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1200, messages: [{ role: 'user', content: userContent }] })
     });
     const data = await response.json();
     const fullText = data.content?.map(b => b.text || '').join('').trim();
@@ -3643,9 +3644,9 @@ INSTRUCTIONS :
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1000,
         messages: [{ role: 'user', content: userContent }]
       })
@@ -4728,9 +4729,9 @@ IMPORTANT : Génère UNIQUEMENT le corps de l'annonce (pas le titre séparé). A
   try {
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1000,
         messages: [{ role: 'user', content: contentParts }]
       })
@@ -4742,9 +4743,9 @@ IMPORTANT : Génère UNIQUEMENT le corps de l'annonce (pas le titre séparé). A
       // Générer aussi le titre
       const titreRes = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
+        headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-20250514',
+          model: 'claude-sonnet-4-5',
           max_tokens: 100,
           messages: [{ role: 'user', content: `Génère UNIQUEMENT le titre Vinted (max 60 caractères, avec émoji, accrocheur) pour ce produit :\n${infos}\nRéponds uniquement avec le titre, rien d'autre.` }]
         })
@@ -4886,8 +4887,8 @@ IMPORTANT : inclure obligatoirement la valeur exacte de la référence produit �
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1500, messages: [{ role: 'user', content: userContent }] })
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1500, messages: [{ role: 'user', content: userContent }] })
     });
     const data = await response.json();
     const fullText = data.content?.map(b => b.text || '').join('').trim();
@@ -5285,9 +5286,9 @@ async function scannerMailsVinted() {
 
     const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: 'claude-sonnet-4-5',
         max_tokens: 1000,
         messages: [{
           role: 'user',
@@ -5645,8 +5646,8 @@ IMPORTANT :
 
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 800, messages: [{ role: 'user', content: userContent }] }),
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 800, messages: [{ role: 'user', content: userContent }] }),
       signal: controller.signal
     });
     clearTimeout(timeoutId);
@@ -7806,8 +7807,8 @@ INSTRUCTIONS :
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': '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' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 1000, messages: [{ role: 'user', content: userContent }] })
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
+      body: JSON.stringify({ model: 'claude-sonnet-4-5', max_tokens: 1000, messages: [{ role: 'user', content: userContent }] })
     });
     const data = await response.json();
     const fullText = data.content?.map(b => b.text || '').join('').trim();
@@ -7932,6 +7933,21 @@ function fermerPhotoMiniature() {
   if (overlay) overlay.style.display = 'none';
 }
 
+function getApiKey() {
+  return localStorage.getItem('ANTHROPIC_KEY') || '';
+}
+
+function ouvrirParametresIA() {
+  const current = localStorage.getItem('ANTHROPIC_KEY') || '';
+  const key = prompt('🔑 Clé API Anthropic\n\nCollez votre clé (sk-ant-...)\nElle sera sauvegardée dans votre navigateur uniquement.\n\nClé actuelle : ' + (current ? '✅ Configurée' : '❌ Non configurée'));
+  if (key && key.trim().startsWith('sk-ant-')) {
+    localStorage.setItem('ANTHROPIC_KEY', key.trim());
+    showToast('✅ Clé API sauvegardée !');
+  } else if (key !== null) {
+    showToast('⚠️ Clé invalide — doit commencer par sk-ant-');
+  }
+}
+
 function showToast(msg) {
   const t = document.getElementById('toast');
   t.textContent = msg;
@@ -7946,10 +7962,10 @@ checkMakeWebhook();
 
 // Vérifier clé API Anthropic au démarrage
 setTimeout(() => {
-  if (!localStorage.getItem('anthropic_api_key')) {
+  if (!localStorage.getItem('ANTHROPIC_KEY')) {
     const key = prompt('🔑 Clé API Anthropic requise\n\nEntrez votre clé (sk-ant-...)\nTrouvez-la sur console.anthropic.com → API Keys');
     if (key && key.trim().startsWith('sk-ant-')) {
-      localStorage.setItem('anthropic_api_key', key.trim());
+      localStorage.setItem('ANTHROPIC_KEY', key.trim());
       showToast('✅ Clé API enregistrée !');
     } else if (key) {
       showToast('⚠️ Clé invalide — doit commencer par sk-ant-');
