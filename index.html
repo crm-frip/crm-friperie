@@ -3278,9 +3278,11 @@ function editProduit(id) {
   document.getElementById('pf-etat-observations').value = p.etatObs || '';
   document.getElementById('pf-materiaux').value  = p.materiaux || '';
   document.getElementById('pf-taille').value     = p.taille || '';
-  // Dimensions
-  updateDimensions();
-  if (p.dimensions) setDimensionsValues(p.dimensions);
+  // Dimensions — délai pour laisser le formulaire s'afficher
+  setTimeout(() => {
+    updateDimensions();
+    if (p.dimensions) setDimensionsValues(p.dimensions);
+  }, 100);
   document.getElementById('pf-description').value= p.description || '';
   document.getElementById('pf-prix').value       = p.prix || '';
 
@@ -5357,43 +5359,33 @@ async function telechargerPhotos() {
 
   showToast('📥 Téléchargement de ' + p.photos.length + ' photo(s)...');
 
-  // Télécharger chaque photo une par une avec un délai
-  // Compatible mobile (iOS/Android) et desktop
   for (let i = 0; i < p.photos.length; i++) {
     const photo = p.photos[i];
     const src = photo.data || photo.url || photo;
     const nom = p.sku + '_photo_' + (i + 1) + '.jpg';
 
     try {
-      if (src.startsWith('data:')) {
-        // Base64 → blob → téléchargement
-        const res = await fetch(src);
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = nom;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      } else {
-        // URL externe → lien direct
-        const a = document.createElement('a');
-        a.href = src;
-        a.download = nom;
-        a.target = '_blank';
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      }
-      // Petit délai entre chaque téléchargement pour éviter le blocage du navigateur
-      await new Promise(r => setTimeout(r, 400));
+      // Fetch l'image (fonctionne pour base64 ET URL Cloudinary)
+      const res = await fetch(src);
+      const blob = await res.blob();
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = nom;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 1000);
+      // Délai entre chaque téléchargement
+      await new Promise(r => setTimeout(r, 600));
     } catch(e) {
       console.error('Erreur téléchargement photo', i, e);
+      // Fallback : ouvrir dans un nouvel onglet
+      window.open(src, '_blank');
+      await new Promise(r => setTimeout(r, 600));
     }
   }
-  showToast('✅ ' + p.photos.length + ' photo(s) enregistrée(s) !');
+  showToast('✅ ' + p.photos.length + ' photo(s) téléchargée(s) !');
 }
 
 // ── MODAL TRAITEMENT ──
