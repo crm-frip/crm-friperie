@@ -3962,9 +3962,10 @@ const TYPES_CHAUSSURE = ['chaussure','sneaker','basket','boot','botte','mocassin
 function getTypeCategory(type) {
   const t = (type || '').toLowerCase().trim();
   if (TYPES_CHAUSSURE.some(k => t.includes(k))) return 'chaussure';
-  if (TYPES_BAS.some(k => t.includes(k)))       return 'bas';
   if (TYPES_ROBE.some(k => t.includes(k)))      return 'robe';
+  // Priorité haut sur bas : "veste en jean" = haut, pas bas
   if (TYPES_HAUT.some(k => t.includes(k)))      return 'haut';
+  if (TYPES_BAS.some(k => t.includes(k)))        return 'bas';
   return null;
 }
 
