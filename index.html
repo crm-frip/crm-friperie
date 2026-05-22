@@ -3586,7 +3586,9 @@ INFORMATIONS PRODUIT :
 ${productInfo}
 
 INSTRUCTIONS :
-- Commence directement par le TITRE sur la première ligne (format : Type Marque Référence – Catégorie – Taille – Couleur + emoji pertinent)
+- Commence directement par le TITRE sur la première ligne
+- Le TITRE doit obligatoirement commencer par exactement "${type}" (ne change pas, ne traduis pas, n'ajoute pas de mot avant ce type)
+- Format titre : ${type} Marque Référence – Catégorie – Taille – Couleur + emoji pertinent
 - Laisse une ligne vide après le titre
 - Rédige ensuite le CORPS de l'annonce : description du produit, caractéristiques clés, état, style, matière avec emojis pertinents
 - Inclus des infos sur la coupe/style si tu connais le modèle
@@ -3594,7 +3596,8 @@ INSTRUCTIONS :
 - Utilise des emojis de façon naturelle et professionnelle
 - Ton : dynamique, vendeur, authentique
 - Si des photos sont fournies, décris ce que tu vois pour enrichir l'annonce
-- Ne mets pas de labels "TITRE :" ou "CORPS :" dans ta réponse, juste le texte directement`
+- Ne mets pas de labels "TITRE :" ou "CORPS :" dans ta réponse, juste le texte directement
+- IMPORTANT : n'invente aucune information qui ne figure pas dans les données du produit`
   });
 
   try {
