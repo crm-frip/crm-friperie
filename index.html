@@ -5496,7 +5496,11 @@ async function handleTraitementPhotos(input) {
       console.error('Erreur compression:', e);
       await new Promise(resolve => {
         const reader = new FileReader();
-        reader.onload = ev => { traitementPhotos.push({ name: file.name, data: ev.target.result }); resolve(); };
+        reader.onload = ev => {
+          // Ne pas sauvegarder en base64 — trop lourd pour Firebase/localStorage
+          console.error('Cloudinary échoué pour', file.name);
+          resolve();
+        };
         reader.readAsDataURL(file);
       });
     }
@@ -7390,27 +7394,29 @@ async function handlePhotosAdd(input) {
   const files = Array.from(input.files);
   if (!files.length) return;
   const label = document.getElementById('pf-photos-label');
-  label.innerHTML = `⏳ Upload de ${files.length} photo(s)...`;
+  label.innerHTML = `⏳ Upload de ${files.length} photo(s) vers Cloudinary...`;
   let uploaded = 0;
+  let errors = 0;
   for (const file of files) {
     try {
       const result = await uploadToCloudinary(file, 'produits');
       pendingPhotos.push({ name: file.name, url: result.url, publicId: result.publicId });
+      uploaded++;
+      label.innerHTML = `⏳ ${uploaded}/${files.length} uploadée(s)...`;
     } catch(e) {
-      await new Promise(resolve => {
-        const reader = new FileReader();
-        reader.onload = ev => {
-          pendingPhotos.push({ name: file.name, data: ev.target.result });
-          resolve();
-        };
-        reader.readAsDataURL(file);
-      });
+      errors++;
+      console.error('Cloudinary upload failed:', e);
     }
-    uploaded++;
-    label.innerHTML = `⏳ ${uploaded}/${files.length} uploadée(s)...`;
   }
-  // Reset input so same files can be added again
   input.value = '';
+  if (errors > 0 && uploaded === 0) {
+    label.innerHTML = `❌ Échec upload — vérifie ta connexion ou le preset Cloudinary`;
+    showToast('❌ Erreur upload photo — réessaie');
+  } else if (errors > 0) {
+    label.innerHTML = `⚠️ ${uploaded} photo(s) uploadée(s), ${errors} échec(s)`;
+  } else {
+    label.innerHTML = `✅ ${uploaded} photo(s) uploadée(s) sur Cloudinary`;
+  }
   refreshPhotosPreview();
 }
 
