@@ -2749,6 +2749,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Pas de données de test — CRM vierge
 
   refreshAll();
+
+  // Scan Gmail automatique si déjà connecté
+  setTimeout(async () => {
+    if (gmailAccessToken) {
+      try {
+        await scannerMailsVintedSilencieux();
+      } catch(e) {
+        console.error('Auto-scan Gmail échoué:', e);
+      }
+    }
+  }, 2000); // Attendre 2s que tout soit chargé
 });
 
 function refreshExpeditions() {
@@ -4875,7 +4886,7 @@ function openConfirmerPublication(id) {
 }
 
 // ── GMAIL SCANNER ──
-const GMAIL_CLIENT_ID = ''; // À remplir via les paramètres
+const GMAIL_CLIENT_ID = '681423349794-fan1tvhb25ara35hl6oblek6p6s68m4u.apps.googleusercontent.com';
 const GMAIL_SCOPE = 'https://www.googleapis.com/auth/gmail.readonly';
 let gmailAccessToken = localStorage.getItem('gmail_access_token') || null;
 let gmailPendingUpdates = [];
@@ -5258,17 +5269,45 @@ ${produitsInfo || 'Aucun produit actif'}
 MAILS VINTED REÇUS :
 ${mails.map((m,i) => `Mail ${i+1} (${m.date}) — ${m.subject}\n${m.body}`).join('\n\n---\n\n')}
 
-RÈGLES :
-- "vendu" / "nouvelle vente" / "transaction" → statut = "acheminement"
-- "expédié" / "colis" / "envoi" → statut = "acheminement"  
-- "réception confirmée" / "évaluation" / "transaction terminée" → statut = "vendu"
+RÈGLES DE TRANSITION DE STATUT (basées sur les vrais mails Vinted) :
 
-Réponds UNIQUEMENT en JSON :
+La référence du produit est TOUJOURS le dernier mot/chiffre à la fin du titre de l'annonce dans le mail (ex: "jean Levi's 550 - bleu - 014" → référence = "014").
+
+RÈGLE 1 - Sujet contient "Ton article s'est vendu" :
+→ Cherche la référence dans le corps du mail (dernier élément après le dernier tiret dans le nom de l'article)
+→ nouveau_statut = "vendu"
+→ extraire: acheteur (nom avant "a acheté"), prix_vente, reference_produit
+
+RÈGLE 2 - Sujet contient "Bordereau d'envoi Vinted" :
+→ Cherche la référence dans le sujet (dernier élément après le dernier tiret)
+→ nouveau_statut = "cmd-preparer"
+→ extraire: reference_produit, date_limite_envoi, bordereau_pdf = true (pièce jointe PDF à récupérer)
+
+RÈGLE 3 - Sujet contient "Commande mise à jour" ET corps contient "en cours d'acheminement" :
+→ Cherche la référence dans le sujet (dernier élément après le dernier tiret)
+→ nouveau_statut = "acheminement"
+→ extraire: reference_produit, date_livraison_estimee
+
+RÈGLE 4 - Corps contient "Cette transaction est finalisée" :
+→ Cherche la référence dans le corps (dernier élément après le dernier tiret dans le nom de l'article)
+→ nouveau_statut = "vente-finalisee"
+→ extraire: reference_produit, montant_vente, numero_transaction, date_transaction
+
+IMPORTANT : Pour trouver le produit dans le CRM, cherche d'abord par référence exacte (ex: "014"), sinon par SKU.
+
+Réponds UNIQUEMENT en JSON valide sans markdown :
 {
   "mises_a_jour": [
-    { "sku": "SKU-XXXX", "nouveau_statut": "acheminement|vendu", "raison": "explication courte", "mail_sujet": "sujet du mail" }
+    { 
+      "reference": "014",
+      "sku": "SKU-XXXX",
+      "nouveau_statut": "vendu",
+      "raison": "explication courte",
+      "mail_sujet": "sujet du mail",
+      "extras": { "acheteur": "nom", "prix_vente": 16.00, "numero_transaction": "", "bordereau_pdf": false }
+    }
   ],
-  "mails_sans_correspondance": ["sujet mail 1", "sujet mail 2"]
+  "mails_sans_correspondance": ["sujet mail 1"]
 }`
         }]
       })
@@ -5293,7 +5332,16 @@ Réponds UNIQUEMENT en JSON :
             <div>
               <div style="font-weight:700;font-size:0.85rem">${u.sku} — ${p ? [p.type,p.marque].filter(Boolean).join(' ') : '?'}</div>
               <div style="font-size:0.75rem;color:var(--ink-light);margin-top:2px">📧 ${u.mail_sujet}</div>
-              <div style="font-size:0.75rem;color:${statutColor};font-weight:600;margin-top:4px">→ ${u.nouveau_statut === 'vendu' ? '🔵 Vendu' : '🟠 Acheminement'}</div>
+              <div style="font-size:0.75rem;color:${statutColor};font-weight:600;margin-top:4px">→ ${{
+                'vendu': '🔵 Vendu',
+                'cmd-preparer': '📦 Commande à préparer',
+                'cmd-envoyer': '📫 Commande à envoyer',
+                'cmd-envoyee': '🚚 Commande envoyée',
+                'acheminement': '🚛 En cours d\'acheminement',
+                'vente-finalisee': '✅ Vente finalisée'
+              }[u.nouveau_statut] || u.nouveau_statut}</div>
+              ${u.extras?.bordereau_pdf ? '<div style="font-size:0.72rem;color:#1A6FA8;margin-top:2px">📎 Bordereau PDF disponible en pièce jointe</div>' : ''}
+              ${u.extras?.prix_vente ? '<div style="font-size:0.72rem;color:#2E7D32;margin-top:2px">💰 ' + u.extras.prix_vente + ' €</div>' : ''}
               <div style="font-size:0.72rem;color:var(--ink-light);margin-top:2px;font-style:italic">${u.raison}</div>
             </div>
             <input type="checkbox" data-idx="${i}" checked style="width:18px;height:18px;accent-color:${statutColor};flex-shrink:0;margin-top:2px">
@@ -5312,6 +5360,121 @@ Réponds UNIQUEMENT en JSON :
   document.getElementById('gmail-scan-btn').disabled = false;
 }
 
+async function scannerMailsVintedSilencieux() {
+  if (!gmailAccessToken) return;
+
+  try {
+    const query = encodeURIComponent('from:vinted.fr newer_than:3d');
+    const listRes = await fetch(
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=10`,
+      { headers: { Authorization: 'Bearer ' + gmailAccessToken } }
+    );
+    const listData = await listRes.json();
+    if (listData.error?.code === 401) { deconnecterGmail(); return; }
+    if (!listData.messages?.length) return;
+
+    const mails = [];
+    for (const msg of listData.messages.slice(0, 8)) {
+      const msgRes = await fetch(
+        `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=full`,
+        { headers: { Authorization: 'Bearer ' + gmailAccessToken } }
+      );
+      const msgData = await msgRes.json();
+      const subject = msgData.payload?.headers?.find(h => h.name === 'Subject')?.value || '';
+      const date = new Date(parseInt(msgData.internalDate)).toLocaleDateString('fr-FR');
+      let body = '';
+      const getBody = (parts) => {
+        if (!parts) return;
+        for (const part of parts) {
+          if (part.mimeType === 'text/plain' && part.body?.data) {
+            body += atob(part.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+          } else if (part.parts) getBody(part.parts);
+        }
+      };
+      if (msgData.payload?.body?.data) {
+        body = atob(msgData.payload.body.data.replace(/-/g,'+').replace(/_/g,'/'));
+      } else getBody(msgData.payload?.parts);
+      mails.push({ subject, date, body: body.substring(0, 800) });
+    }
+
+    const produitsInfo = db.produits
+      .filter(p => ['publie','vendu','cmd-preparer','cmd-envoyer','cmd-envoyee','acheminement'].includes(p.statut))
+      .map(p => `${p.sku} | ref:${p.reference||''} | ${[p.type,p.marque].filter(Boolean).join(' ')} | statut: ${p.statut}`)
+      .join('\n');
+
+    if (!produitsInfo) return;
+
+    const claudeRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'anthropic-version': '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true', 'x-api-key': getApiKey() },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-5',
+        max_tokens: 1000,
+        messages: [{ role: 'user', content: `Tu es un assistant CRM pour une friperie Vinted. Analyse ces mails et détermine les changements de statut.
+
+PRODUITS DANS LE CRM :
+${produitsInfo}
+
+MAILS VINTED REÇUS :
+${mails.map((m,i) => `Mail ${i+1} (${m.date}) — ${m.subject}\n${m.body}`).join('\n\n---\n\n')}
+
+RÈGLE 1 - "Ton article s'est vendu" → nouveau_statut = "vendu"
+RÈGLE 2 - "Bordereau d'envoi Vinted" → nouveau_statut = "cmd-preparer"
+RÈGLE 3 - "Commande mise à jour" + "acheminement" → nouveau_statut = "acheminement"
+RÈGLE 4 - "transaction est finalisée" → nouveau_statut = "vente-finalisee"
+
+La référence est le dernier élément après le dernier tiret dans le nom de l'article (ex: "jean Levi's - bleu - 014" → "014").
+
+Réponds UNIQUEMENT en JSON :
+{"mises_a_jour":[{"reference":"014","sku":"SKU-XXXX","nouveau_statut":"vendu","raison":"raison","mail_sujet":"sujet","extras":{"acheteur":"","prix_vente":0,"numero_transaction":"","bordereau_pdf":false}}]}` }]
+      })
+    });
+
+    const claudeData = await claudeRes.json();
+    const raw = claudeData.content?.map(b => b.text || '').join('') || '';
+    const jsonStart = raw.indexOf('{'); const jsonEnd = raw.lastIndexOf('}');
+    if (jsonStart === -1) return;
+    const analyse = JSON.parse(raw.substring(jsonStart, jsonEnd + 1));
+    const updates = analyse.mises_a_jour || [];
+
+    if (updates.length === 0) return;
+
+    // Appliquer automatiquement
+    let count = 0;
+    updates.forEach(update => {
+      let p = db.produits.find(x => x.sku === update.sku);
+      if (!p && update.reference) {
+        p = db.produits.find(x => x.reference === update.reference || String(x.id) === String(update.reference));
+      }
+      if (!p) return;
+      // Ne pas rétrograder un statut
+      const ordre = ['stocke-non-traite','non-publie','non-publie-reposte','publie','vendu','cmd-preparer','cmd-envoyer','cmd-envoyee','acheminement','vente-finalisee'];
+      const ancienIdx = ordre.indexOf(p.statut);
+      const nouveauIdx = ordre.indexOf(update.nouveau_statut);
+      if (nouveauIdx <= ancienIdx) return;
+      p.statut = update.nouveau_statut;
+      const hist = p.statutHistory || [];
+      hist.push({ statut: update.nouveau_statut, date: new Date().toISOString(), note: 'Auto-scan Gmail — ' + update.raison });
+      p.statutHistory = hist;
+      if (update.extras) {
+        if (update.extras.acheteur) p.acheteur = update.extras.acheteur;
+        if (update.extras.prix_vente) p.prixVente = update.extras.prix_vente;
+        if (update.extras.numero_transaction) p.numeroTransaction = update.extras.numero_transaction;
+        if (update.extras.bordereau_pdf) p.bordereauDisponible = true;
+      }
+      count++;
+    });
+
+    if (count > 0) {
+      save().catch(e => console.error(e));
+      refreshAll();
+      showToast('📧 ' + count + ' statut(s) mis à jour automatiquement via Gmail !');
+    }
+  } catch(e) {
+    console.error('Auto-scan Gmail erreur:', e);
+  }
+}
+
 function appliquerMajStatuts() {
   const checkboxes = document.querySelectorAll('#gmail-results-list input[type=checkbox]');
   let count = 0;
@@ -5320,12 +5483,25 @@ function appliquerMajStatuts() {
     const idx = parseInt(cb.dataset.idx);
     const update = gmailPendingUpdates[idx];
     if (!update) return;
-    const p = db.produits.find(x => x.sku === update.sku);
+    // Chercher par SKU d'abord, sinon par référence
+    let p = db.produits.find(x => x.sku === update.sku);
+    if (!p && update.reference) {
+      p = db.produits.find(x => x.reference === update.reference || x.sku?.endsWith('-' + update.reference) || String(x.id) === String(update.reference));
+    }
     if (!p) return;
     p.statut = update.nouveau_statut;
     const hist = p.statutHistory || [];
     hist.push({ statut: update.nouveau_statut, date: new Date().toISOString(), note: 'Via scan Gmail — ' + update.raison });
     p.statutHistory = hist;
+    // Appliquer les extras
+    if (update.extras) {
+      if (update.extras.acheteur) p.acheteur = update.extras.acheteur;
+      if (update.extras.prix_vente) p.prixVente = update.extras.prix_vente;
+      if (update.extras.numero_transaction) p.numeroTransaction = update.extras.numero_transaction;
+      if (update.extras.date_limite_envoi) p.dateLimiteEnvoi = update.extras.date_limite_envoi;
+      if (update.extras.date_livraison_estimee) p.dateLivraisonEstimee = update.extras.date_livraison_estimee;
+      if (update.extras.bordereau_pdf) p.bordereauDisponible = true;
+    }
     count++;
   });
   if (count > 0) {
